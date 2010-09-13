@@ -35,6 +35,12 @@ function flickrbatchimport_page() {
       $operations[] = array('flickrbatchimport_process', array($account));
     }
   }
+
+  if (!count($operations)) {
+    GLOBAL $user;
+    return t('You have no Flickr Rippr accounts enabled. You can create them at !link', array('!link' => l('Flickr Rippr Accounts', 'user/'. $user->uid .'/flickrrippr')));
+  }
+
 //   return nl2br(print_r($operations, 1));
   $batch = array(
     'title' => t('Flickr Batch Importing'),
