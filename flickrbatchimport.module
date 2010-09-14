@@ -42,14 +42,16 @@ function flickrbatchimport_form() {
   $form['config']['num_photos'] = array(
     '#type' => 'textfield', 
     '#title' => t('Number of photos per request'),
-    '#description' => t('How many photos per request to the flickr api? Higher numbers mean less requests, but require more memory on your webserver. If import is failing, try settings this number lower.'),
-    '#default_value' => 50,
+    '#description' => t('How many photos per request to the flickr api? Higher numbers mean less requests, but requires more memory on your webserver. If import is failing, try settings this number lower.'),
+    '#default_value' => 10,
   );
 
   $form['submit'] = array('#type' => 'submit', '#value' => t('Import'));
   return $form;
 }
-function flickrbatchimport_form_submit() {
+function flickrbatchimport_form_submit($form_id, $form_state) {
+
+  $num_photos = $form_state['values']['num_photos'];
   $operations = array();
 
 
@@ -65,7 +67,7 @@ function flickrbatchimport_form_submit() {
     $count[$account->flickrid] = $search['pages'];
     $account->total_pages = $search['pages'];
     for ($i=0; $i<=100 & $i<=$search['pages']; $i++) {
-      $operations[] = array('flickrbatchimport_process', array($account));
+      $operations[] = array('flickrbatchimport_process', array($account, $num_photos));
     }
   }
 //   return nl2br(print_r($operations, 1));
@@ -78,23 +80,24 @@ function flickrbatchimport_form_submit() {
   batch_set($batch);
 
   // only needed if not inside a form _submit handler :
-  batch_process();
+//   batch_process();
   //   return '';
 }
 
-function flickrbatchimport_process($account, &$context) {
+function flickrbatchimport_process($account, $num_photos, &$context) {
 
   if (empty($context['sandbox'])) {
     $context['sandbox']['progress'] = 0;
     $context['sandbox']['current_node'] = 0;
     $context['sandbox']['pagenum'] = 0;
+    $context['sandbox']['max'] = 100;
   }
 
   //the functions from flickr rippr
   include_once(drupal_get_path('module', 'flickrrippr') .'/flickrrippr.inc');
   $flickr = @flickrapi_phpFlickr();
   
-  $num_photos = 10;
+//   $num_photos = 10;
   $pagenum = variable_get('flickrbatchimport_pagenum_'. $num_photos . '_'. $account->flickrid, 1);
   error_log("Page num = $pagenum");
   $query = array(
