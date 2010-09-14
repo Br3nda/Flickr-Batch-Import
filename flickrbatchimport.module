@@ -17,6 +17,41 @@ function flickrbatchimport_perm() {
 }
 
 function flickrbatchimport_page() {
+  return drupal_get_form('flickrbatchimport_form');
+}
+function flickrbatchimport_form() {
+  //the functions from flickr rippr
+  include_once(drupal_get_path('module', 'flickrrippr') .'/flickrrippr.inc');
+  $flickr = @flickrapi_phpFlickr();
+
+  $result = db_query("SELECT * FROM {flickrusers}");
+
+  $form['accounts'] = array('#type' => 'fieldset', '#title' => t('Flickr Accounts'));
+  while($account = db_fetch_object($result)) {
+//     drupal_set_message(print_r($account, 1));
+    $search = $flickr->photos_search(array('user_id' => $account->flickrid, 'page'=>1, 'per_page' => 1));
+    $count[$account->flickrid] = $search['pages'];
+    $form['accounts'][$account->flickrid] = array(
+      '#type' => 'checkbox',
+      '#value' => TRUE,
+      '#title' => t("!username (%count photos)", array('!username' => check_plain($account->flickrusername), '%count' => number_format($search['pages']))),
+    );
+  }
+
+  $form['config'] = array('#type' => 'fieldset', '#title' => t('Config'));
+  $form['config']['num_photos'] = array(
+    '#type' => 'textfield', 
+    '#title' => t('Number of photos per request'),
+    '#description' => t('How many photos per request to the flickr api? Higher numbers mean less requests, but requires more memory on your webserver. If import is failing, try settings this number lower.'),
+    '#default_value' => 10,
+  );
+
+  $form['submit'] = array('#type' => 'submit', '#value' => t('Import'));
+  return $form;
+}
+function flickrbatchimport_form_submit($form_id, $form_state) {
+
+  $num_photos = $form_state['values']['num_photos'];
   $operations = array();
 
 
@@ -32,7 +67,7 @@ function flickrbatchimport_page() {
     $count[$account->flickrid] = $search['pages'];
     $account->total_pages = $search['pages'];
     for ($i=0; $i<=100 & $i<=$search['pages']; $i++) {
-      $operations[] = array('flickrbatchimport_process', array($account));
+      $operations[] = array('flickrbatchimport_process', array($account, $num_photos));
     }
   }
 
@@ -51,23 +86,24 @@ function flickrbatchimport_page() {
   batch_set($batch);
 
   // only needed if not inside a form _submit handler :
-  batch_process();
+//   batch_process();
   //   return '';
 }
 
-function flickrbatchimport_process($account, &$context) {
+function flickrbatchimport_process($account, $num_photos, &$context) {
 
   if (empty($context['sandbox'])) {
     $context['sandbox']['progress'] = 0;
     $context['sandbox']['current_node'] = 0;
     $context['sandbox']['pagenum'] = 0;
+    $context['sandbox']['max'] = 100;
   }
 
   //the functions from flickr rippr
   include_once(drupal_get_path('module', 'flickrrippr') .'/flickrrippr.inc');
   $flickr = @flickrapi_phpFlickr();
   
-  $num_photos = 10;
+//   $num_photos = 10;
   $pagenum = variable_get('flickrbatchimport_pagenum_'. $num_photos . '_'. $account->flickrid, 1);
   error_log("Page num = $pagenum");
   $query = array(
@@ -81,11 +117,11 @@ function flickrbatchimport_process($account, &$context) {
   $photos = $flickr->photos_search($query);
 
   $total = $photos['pages'];
-  $percent = ($pagenum * $num_photos) / $total;
+  $percent = ($pagenum / $total) * 100;
 
-  $context['message'] = t("Processed %percent of photos by %user", array('%percent' => sprintf('%.2f', $percent) .'%', '%user' => $account->flickrusername));;
+  $context['message'] = t("Imported %percent of photos by %user", array('%percent' => sprintf('%.2f', $percent) .'%', '%user' => $account->flickrusername));;
 
-  error_log("$account->flickrusername Percentage done = $percent %  ($pagenum * $num_photos) / $total");
+  error_log("$account->flickrusername Percentage done = $percent %  ($pagenum / $total");
   $context['progress'] = $percent;
 
 //   $context['sandbox']['pagenum']++;
