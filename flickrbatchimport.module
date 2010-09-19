@@ -31,7 +31,7 @@ function flickrbatchimport_form() {
 //     drupal_set_message(print_r($account, 1));
     $search = $flickr->photos_search(array('user_id' => $account->flickrid, 'page'=>1, 'per_page' => 1));
     $count[$account->flickrid] = $search['pages'];
-    $form['accounts'][$account->flickrid] = array(
+    $form['accounts']['account_'. $account->flickrid] = array(
       '#type' => 'checkbox',
       '#value' => TRUE,
       '#title' => t("!username (%count photos)", array('!username' => check_plain($account->flickrusername), '%count' => number_format($search['pages']))),
@@ -61,13 +61,17 @@ function flickrbatchimport_form_submit($form_id, $form_state) {
 
 
   $result = db_query("SELECT * FROM {flickrusers}");
-  while($account = db_fetch_object($result)) {
-//     drupal_set_message(print_r($account, 1));
-    $search = $flickr->photos_search(array('user_id' => $account->flickrid, 'page'=>1, 'per_page' => 1));
-    $count[$account->flickrid] = $search['pages'];
-    $account->total_pages = $search['pages'];
-    for ($i=0; $i<=100 & $i<=$search['pages']; $i++) {
-      $operations[] = array('flickrbatchimport_process', array($account, $num_photos));
+  foreach($form_state['values'] as $key => $val) {
+    if (preg_match('!^account_!', $key)) {
+      $account = preg_replace('!^account_!', '', $key);
+
+      //     drupal_set_message(print_r($account, 1));
+      $search = $flickr->photos_search(array('user_id' => $account, 'page'=>1, 'per_page' => 1));
+      //     $count[$account->flickrid] = $search['pages'];
+      //     $account->total_pages = $search['pages'];
+      for ($i=0; $i<=100 & $i<=$search['pages']; $i++) {
+	$operations[] = array('flickrbatchimport_process', array($account, $num_photos));
+      }
     }
   }
 
