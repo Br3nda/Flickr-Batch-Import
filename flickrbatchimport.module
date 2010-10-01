@@ -119,8 +119,12 @@ function flickrbatchimport_process($account, $num_photos, &$context) {
 
 //   error_log("Flickr Query = ". print_r($query, 1));
   $photos = $flickr->photos_search($query);
-
+  if(!$photos) {
+    $context['message'] = t('Error: No photos found.');
+    return;
+  }
   $total = $photos['pages'];
+
   $percent = ($pagenum / $total) * 100;
 
   $context['message'] = t("Imported %percent of photos by %user", array('%percent' => sprintf('%.2f', $percent) .'%', '%user' => $account->flickrusername));;
