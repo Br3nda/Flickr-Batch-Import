@@ -24,14 +24,14 @@ function flickrbatchimport_form() {
   include_once(drupal_get_path('module', 'flickrrippr') .'/flickrrippr.inc');
   $flickr = @flickrapi_phpFlickr();
 
-  $result = db_query("SELECT * FROM {flickrusers}");
+  $result = db_query("SELECT * FROM {flickrusers} ORDER BY flickrusername");
 
   $form['accounts'] = array('#type' => 'fieldset', '#title' => t('Flickr Accounts'));
   while($account = db_fetch_object($result)) {
 //     drupal_set_message(print_r($account, 1));
     $search = $flickr->photos_search(array('user_id' => $account->flickrid, 'page'=>1, 'per_page' => 1));
     $count[$account->flickrid] = $search['pages'];
-    $form['accounts'][$account->flickrid] = array(
+    $form['accounts']['account_'. $account->flickrid] = array(
       '#type' => 'checkbox',
       '#value' => TRUE,
       '#title' => t("!username (%count photos)", array('!username' => check_plain($account->flickrusername), '%count' => number_format($search['pages']))),
@@ -60,16 +60,26 @@ function flickrbatchimport_form_submit($form_id, $form_state) {
   $flickr = @flickrapi_phpFlickr();
 
 
-  $result = db_query("SELECT * FROM {flickrusers}");
-  while($account = db_fetch_object($result)) {
-//     drupal_set_message(print_r($account, 1));
-    $search = $flickr->photos_search(array('user_id' => $account->flickrid, 'page'=>1, 'per_page' => 1));
-    $count[$account->flickrid] = $search['pages'];
-    $account->total_pages = $search['pages'];
-    for ($i=0; $i<=100 & $i<=$search['pages']; $i++) {
-      $operations[] = array('flickrbatchimport_process', array($account, $num_photos));
+//   $result = db_query("SELECT * FROM {flickrusers}");
+  foreach($form_state['values'] as $key => $val) {
+    if (preg_match('!^account_!', $key)) {
+      $nsid = preg_replace('!^account_!', '', $key);
+
+      //     drupal_set_message(print_r($account, 1));
+      $search = $flickr->photos_search(array('user_id' => $nsid, 'page'=>1, 'per_page' => 1));
+      //     $count[$account->flickrid] = $search['pages'];
+      //     $account->total_pages = $search['pages'];
+      for ($i=0; $i<=100 & $i<=$search['pages']; $i++) {
+	$operations[] = array('flickrbatchimport_process', array($nsid, $num_photos));
+      }
     }
   }
+
+  if (!count($operations)) {
+    GLOBAL $user;
+    return t('You have no Flickr Rippr accounts enabled. You can create them at !link', array('!link' => l('Flickr Rippr Accounts', 'user/'. $user->uid .'/flickrrippr')));
+  }
+
 //   return nl2br(print_r($operations, 1));
   $batch = array(
     'title' => t('Flickr Batch Importing'),
@@ -84,7 +94,7 @@ function flickrbatchimport_form_submit($form_id, $form_state) {
   //   return '';
 }
 
-function flickrbatchimport_process($account, $num_photos, &$context) {
+function flickrbatchimport_process($nsid, $num_photos, &$context) {
 
   if (empty($context['sandbox'])) {
     $context['sandbox']['progress'] = 0;
@@ -98,10 +108,10 @@ function flickrbatchimport_process($account, $num_photos, &$context) {
   $flickr = @flickrapi_phpFlickr();
   
 //   $num_photos = 10;
-  $pagenum = variable_get('flickrbatchimport_pagenum_'. $num_photos . '_'. $account->flickrid, 1);
+  $pagenum = variable_get('flickrbatchimport_pagenum_'. $num_photos . '_'. $nsid, 1);
   error_log("Page num = $pagenum");
   $query = array(
-    'user_id' => $account->flickrid,
+    'user_id' => $nsid,
     'per_page' => $num_photos,
     'page' =>  $pagenum,
     'sort' => 'date-taken-asc',
@@ -109,13 +119,17 @@ function flickrbatchimport_process($account, $num_photos, &$context) {
 
 //   error_log("Flickr Query = ". print_r($query, 1));
   $photos = $flickr->photos_search($query);
-
+  if(!$photos) {
+    $context['message'] = t('Error: No photos found.');
+    return;
+  }
   $total = $photos['pages'];
+
   $percent = ($pagenum / $total) * 100;
 
-  $context['message'] = t("Imported %percent of photos by %user", array('%percent' => sprintf('%.2f', $percent) .'%', '%user' => $account->flickrusername));;
+  $context['message'] = t("Imported %percent of photos by %user", array('%percent' => sprintf('%.2f', $percent) .'%', '%user' => $nsid));;
 
-  error_log("$account->flickrusername Percentage done = $percent %  ($pagenum / $total");
+  error_log("$nsid Percentage done = $percent %  ($pagenum / $total");
   $context['progress'] = $percent;
 
 //   $context['sandbox']['pagenum']++;
